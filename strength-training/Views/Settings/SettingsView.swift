@@ -12,6 +12,7 @@ internal import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    var healthKitService: HealthKitWorkoutService
 
     @State private var isImporting = false
     @State private var pendingRestoreData: Data?
@@ -24,6 +25,39 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    if healthKitService.isAvailable {
+                        switch healthKitService.authorizationStatus {
+                        case .none:
+                            Button {
+                                Task {
+                                    await healthKitService.requestAuthorization()
+                                }
+                            } label: {
+                                Label("Connect Apple Health", systemImage: "heart.fill")
+                            }
+                        case true?:
+                            Label("Apple Health Connected", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        case false?:
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label("Apple Health Not Authorized", systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                                Text("Open Settings > Privacy > Health to grant access.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Label("Apple Health Not Available", systemImage: "heart.slash")
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Health")
+                } footer: {
+                    Text("When connected, workouts are saved to Apple Health for Activity Ring credit and fitness tracking.")
+                }
+
                 Section {
                     Button(action: exportBackup) {
                         Label("Export Backup", systemImage: "square.and.arrow.up")

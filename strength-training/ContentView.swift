@@ -11,6 +11,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var workoutViewModel: WorkoutViewModel?
+    @State private var healthKitService = HealthKitWorkoutService()
 
     var body: some View {
         Group {
@@ -29,7 +30,7 @@ struct ContentView: View {
                         ExerciseLibraryView()
                     }
                     Tab("Settings", systemImage: "gear") {
-                        SettingsView()
+                        SettingsView(healthKitService: healthKitService)
                     }
                 }
             } else {
@@ -39,7 +40,7 @@ struct ContentView: View {
         .onAppear {
             SeedData.seedIfNeeded(context: modelContext)
             if workoutViewModel == nil {
-                workoutViewModel = WorkoutViewModel(modelContext: modelContext)
+                workoutViewModel = WorkoutViewModel(modelContext: modelContext, healthKitService: healthKitService)
             }
         }
     }

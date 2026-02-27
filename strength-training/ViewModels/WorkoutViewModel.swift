@@ -16,9 +16,13 @@ final class WorkoutViewModel {
     /// Kept alive so it can be resumed or explicitly abandoned.
     var suspendedSession: WorkoutSession?
     var selectedMode: TrainingMode = .highWeightLowReps
+    let healthKitService: HealthKitWorkoutService
 
-    init(modelContext: ModelContext) {
+    init(modelContext: ModelContext, healthKitService: HealthKitWorkoutService) {
         self.modelContext = modelContext
+        self.healthKitService = healthKitService
+        healthKitService.checkAuthorization()
+        healthKitService.cleanUpOrphanedState()
         resolveSessionState()
     }
 
@@ -68,6 +72,7 @@ final class WorkoutViewModel {
         if let suspended = suspendedSession, suspended.dayType == dayType {
             activeSession = suspended
             suspendedSession = nil
+            healthKitService.resumeWorkout()
             return
         }
         // Silently discard a suspended session that has no sets
@@ -82,12 +87,14 @@ final class WorkoutViewModel {
         modelContext.insert(session)
         try? modelContext.save()
         activeSession = session
+        startHealthKitWorkout()
     }
 
     /// Move the active session to the background without completing it.
     func suspendSession() {
         suspendedSession = activeSession
         activeSession = nil
+        healthKitService.pauseWorkout()
     }
 
     /// Discard the suspended session and immediately start a new one.
@@ -101,6 +108,10 @@ final class WorkoutViewModel {
         modelContext.insert(session)
         try? modelContext.save()
         activeSession = session
+        Task {
+            await healthKitService.endWorkout()
+            try? await healthKitService.startWorkout()
+        }
     }
 
     /// Number of exercises in the suspended session that have at least one set.
@@ -118,6 +129,9 @@ final class WorkoutViewModel {
         session.isCompleted = true
         try? modelContext.save()
         activeSession = nil
+        Task {
+            await healthKitService.endWorkout()
+        }
     }
 
     // MARK: - Exercises
@@ -179,6 +193,19 @@ final class WorkoutViewModel {
     }
 
     // MARK: - Helpers
+
+    private func startHealthKitWorkout() {
+        Task {
+            if healthKitService.authorizationStatus == nil {
+                let authorized = await healthKitService.requestAuthorization()
+                if authorized {
+                    try? await healthKitService.startWorkout()
+                }
+            } else if healthKitService.authorizationStatus == true {
+                try? await healthKitService.startWorkout()
+            }
+        }
+    }
 
     private func findOrCreateRecord(for exercise: Exercise) -> ExerciseRecord {
         if let existing = currentRecord(for: exercise) {
